@@ -1,22 +1,23 @@
 import {
+  ConnectedSocket,
   MessageBody,
   SubscribeMessage,
   WebSocketGateway,
-  WebSocketServer,
+  WsException,
   WsResponse,
 } from '@nestjs/websockets';
-import { Observable, from, map } from 'rxjs';
-import { Server } from 'socket.io';
+import { Observable, catchError, from, map, throwError } from 'rxjs';
+import { UseFilters, UsePipes } from '@nestjs/common';
+import { Socket } from 'socket.io';
 
+import { WSValidationPipe, WsExceptionFilter } from '../../infrastructure';
 import { TicketEntity, TicketService } from '../../domain';
 import { BasicControllerGatEway } from '../abstract/basicController.gateway';
 import { CreateTicketDto } from './dto';
 
 @WebSocketGateway()
+@UseFilters(WsExceptionFilter)
 export class TicketControllerGatEway extends BasicControllerGatEway {
-  @WebSocketServer()
-  public server: Server;
-
   constructor(private readonly ticketService: TicketService) {
     super();
   }
@@ -29,11 +30,21 @@ export class TicketControllerGatEway extends BasicControllerGatEway {
   }
 
   @SubscribeMessage('on-register-ticket')
+  @UsePipes(WSValidationPipe)
   registerTicket(
-    @MessageBody() data: CreateTicketDto,
+    @ConnectedSocket() client: Socket,
+    @MessageBody()
+    data: CreateTicketDto,
   ): Observable<WsResponse<TicketEntity>> {
+    console.log(client.id);
     return from(this.ticketService.registerTicket(data)).pipe(
       map((item) => ({ event: 'on-register-ticket', data: item })),
+      catchError(() =>
+        throwError(
+          () => this.server.emit('on-error', new WsException(`Error`)),
+          // this.server.emit(`${client.id}`, new WsException(`Invalid data`)),
+        ),
+      ),
     );
   }
 }

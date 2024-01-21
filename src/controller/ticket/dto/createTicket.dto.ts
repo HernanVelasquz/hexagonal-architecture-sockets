@@ -24,5 +24,6 @@ export class CreateTicketDto extends TicketEntity {
   priority?: Priority;
 
   @IsString()
+  @IsNotEmpty()
   user: UserEntity;
 }
